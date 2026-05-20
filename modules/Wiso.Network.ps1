@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Branche reseau : interfaces, voisins, ping, port, scan — optimise pour reponses rapides.
+# Branche reseau : interfaces, voisins, ping, scan, route, dns, gateway, lan.
 
 function Test-WisoTcpConnect {
     param(
@@ -37,23 +37,58 @@ function Invoke-WisoInterfaces {
 }
 
 function Invoke-WisoNeighborsArp {
-    # arp -a est en general beaucoup plus rapide que Get-NetNeighbor (important pour le timeout Trish CLI).
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "$env:ComSpec"
-    $psi.Arguments = "/c arp -a"
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
-    $out = $p.StandardOutput.ReadToEnd()
-    $err = $p.StandardError.ReadToEnd()
-    $null = $p.WaitForExit(8000)
-    if (-not [string]::IsNullOrWhiteSpace($err)) {
-        $out + "`n" + $err
-    } else {
-        $out
+    Invoke-WisoNativeCommand -FileName "$env:ComSpec" -Arguments '/c arp -a' -FixConsoleEncoding
+}
+
+function Invoke-WisoParseArpTable {
+    param([string]$ArpText)
+    $entries = New-Object System.Collections.Generic.List[object]
+    $currentInterface = ""
+    foreach ($line in ($ArpText -split "`r?`n")) {
+        if ($line -match 'Interface:\s*(\d{1,3}(?:\.\d{1,3}){3})') {
+            $currentInterface = $Matches[1]
+            continue
+        }
+        if ($line -match '^\s*(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F-]+)\s+(\S+)') {
+            $ip = $Matches[1]
+            $mac = $Matches[2]
+            $type = $Matches[3]
+            $entries.Add([pscustomobject]@{
+                Interface = $currentInterface
+                IP        = $ip
+                MAC       = $mac
+                Type      = $type
+            })
+        }
     }
+    return $entries
+}
+
+function Test-WisoIsUsefulArpHost {
+    param([string]$Ip, [string]$Mac)
+    if ($Ip -match '^224\.|^239\.|^255\.255\.255\.255$') { return $false }
+    if ($Mac -match '^ff-ff-ff-ff-ff-ff$') { return $false }
+    if ($Ip -match '^224\.0\.0\.') { return $false }
+    return $true
+}
+
+function Invoke-WisoNeighborsBrief {
+    $raw = Invoke-WisoNeighborsArp
+    $parsed = Invoke-WisoParseArpTable -ArpText $raw
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lastIface = ""
+    foreach ($e in ($parsed | Where-Object { Test-WisoIsUsefulArpHost -Ip $_.IP -Mac $_.MAC })) {
+        if ($e.Interface -ne $lastIface) {
+            $lines.Add("")
+            $lines.Add(("[{0}]" -f $e.Interface))
+            $lastIface = $e.Interface
+        }
+        $lines.Add(("  {0,-18} {1,-20} {2}" -f $e.IP, $e.MAC, $e.Type))
+    }
+    if ($lines.Count -eq 0) {
+        return "Aucun voisin utile (hors multicast/broadcast)."
+    }
+    return ($lines -join "`n").Trim()
 }
 
 function Invoke-WisoNeighborsWin {
@@ -74,17 +109,8 @@ function Invoke-WisoPingExe {
     if ($Count -lt 1) { $Count = 1 }
     if ($Count -gt 20) { $Count = 20 }
     $w = 1200
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "$env:SystemRoot\System32\ping.exe"
-    $psi.Arguments = "-n $Count -w $w `"$Target`""
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
-    $out = $p.StandardOutput.ReadToEnd()
-    $null = $p.WaitForExit(15000)
-    $out
+    Invoke-WisoNativeCommand -FileName "$env:SystemRoot\System32\ping.exe" `
+        -Arguments "-n $Count -w $w `"$Target`"" -WaitMs 15000 -FixConsoleEncoding
 }
 
 function Invoke-WisoPortTest {
@@ -113,4 +139,137 @@ function Invoke-WisoTcpScan {
     }
     $lines.Add("(scan TCP court par port - pas un equivalent nmap)")
     return $lines -join "`n"
+}
+
+function Invoke-WisoTcpScanQuick {
+    param([Parameter(Mandatory = $true)][string]$HostName)
+    Invoke-WisoTcpScan -HostName $HostName -Ports @(80, 443, 445, 3389) -TimeoutMsPerPort 500
+}
+
+function Invoke-WisoPortscan {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][string]$PortsSpec
+    )
+    $ports = @()
+    foreach ($part in ($PortsSpec -split '[,\s;]+')) {
+        $part = $part.Trim()
+        if ($part -eq "") { continue }
+        $n = 0
+        if ([int]::TryParse($part, [ref]$n) -and $n -ge 1 -and $n -le 65535) {
+            $ports += $n
+        }
+    }
+    $ports = $ports | Select-Object -Unique
+    if ($ports.Count -eq 0) {
+        throw "Liste de ports vide (ex: 80,443,8080)."
+    }
+    if ($ports.Count -gt 12) {
+        throw "Maximum 12 ports par invocation (limite timeout Trish)."
+    }
+    Invoke-WisoTcpScan -HostName $HostName -Ports $ports -TimeoutMsPerPort 600
+}
+
+function Invoke-WisoRoute {
+    Invoke-WisoNativeCommand -FileName "$env:ComSpec" -Arguments '/c route print -4' -WaitMs 10000 -FixConsoleEncoding
+}
+
+function Invoke-WisoDns {
+    $lines = New-Object System.Collections.Generic.List[string]
+    Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.ServerAddresses -and $_.ServerAddresses.Count -gt 0 } |
+        ForEach-Object {
+            $srv = $_.ServerAddresses -join ", "
+            $lines.Add(("{0,-32} DNS: {1}" -f $_.InterfaceAlias, $srv))
+        }
+    if ($lines.Count -eq 0) {
+        return "Aucun serveur DNS IPv4 configure."
+    }
+    return ($lines -join "`n")
+}
+
+function Invoke-WisoGateway {
+    $lines = New-Object System.Collections.Generic.List[string]
+    $routes = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+        Sort-Object RouteMetric |
+        Select-Object -First 3
+    foreach ($r in $routes) {
+        $ifAlias = ""
+        if ($r.InterfaceIndex) {
+            $iface = Get-NetIPInterface -InterfaceIndex $r.InterfaceIndex -ErrorAction SilentlyContinue
+            if ($iface) { $ifAlias = $iface.InterfaceAlias }
+        }
+        $lines.Add(("{0,-18} via {1,-15} metric={2} if={3}" -f "0.0.0.0/0", $r.NextHop, $r.RouteMetric, $ifAlias))
+    }
+    if ($lines.Count -eq 0) {
+        return "Aucune route par defaut IPv4."
+    }
+    $gw = ($routes | Select-Object -First 1).NextHop
+    if ($gw) {
+        $lines.Add("")
+        $lines.Add("--- ping passerelle ($gw) ---")
+        $pingOut = Invoke-WisoPingExe -Target $gw -Count 1
+        $lines.Add($pingOut)
+    }
+    return ($lines -join "`n")
+}
+
+function Invoke-WisoLan {
+    param([int]$MaxHosts = 24)
+    if ($MaxHosts -lt 1) { $MaxHosts = 1 }
+    if ($MaxHosts -gt 32) { $MaxHosts = 32 }
+
+    $cfg = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } |
+        Select-Object -First 1
+
+    if (-not $cfg) {
+        throw "Aucune interface IPv4 avec passerelle."
+    }
+
+    $ip = $cfg.IPv4Address.IPAddress
+    if ($ip -is [array]) { $ip = $ip[0] }
+    $prefix = $cfg.IPv4Address.PrefixLength
+    if ($prefix -ne 24) {
+        return ("Prefix /{0} non supporte pour lan (seul /24). Utilisez wiso ping." -f $prefix)
+    }
+
+    $octets = $ip -split '\.'
+    if ($octets.Count -ne 4) {
+        throw "Adresse IPv4 invalide: $ip"
+    }
+    $base = "{0}.{1}.{2}" -f $octets[0], $octets[1], $octets[2]
+    $gw = $cfg.IPv4DefaultGateway.NextHop
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(("Subnet: {0}.0/24 (interface {1})" -f $base, $cfg.InterfaceAlias))
+    $lines.Add(("Gateway: {0}" -f $gw))
+    $lines.Add(("Scan ICMP: {0}.1 .. {0}.{1} (max {1} hotes)" -f $base, $MaxHosts))
+    $lines.Add("")
+
+    $alive = New-Object System.Collections.Generic.List[string]
+    1..$MaxHosts | ForEach-Object {
+        $target = "{0}.{1}" -f $base, $_
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "$env:SystemRoot\System32\ping.exe"
+        $psi.Arguments = "-n 1 -w 200 `"$target`""
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $null = $p.StandardOutput.ReadToEnd()
+        $null = $p.WaitForExit(1500)
+        if ($p.ExitCode -eq 0) {
+            $alive.Add($target)
+        }
+    }
+
+    if ($alive.Count -eq 0) {
+        $lines.Add("Aucune reponse ICMP dans la plage scannee.")
+    } else {
+        foreach ($h in $alive) {
+            $lines.Add(("  ALIVE  {0}" -f $h))
+        }
+    }
+    return ($lines -join "`n")
 }

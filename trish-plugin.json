@@ -1,7 +1,7 @@
 {
   "name": "wiso",
-  "version": "0.2.0",
-  "description": "Plugin Trish orienté réseau et Wi‑Fi Windows (raccourcis netsh, voisinage, tests de port).",
+  "version": "0.3.0",
+  "description": "Plugin Trish reseau/Wi-Fi Windows : profils WLAN, ARP, route, DNS, gateway, scan TCP, pare-feu, ecoutes.",
   "entry": "wiso.ps1",
   "shell": "powershell",
   "os": ["windows"],
@@ -9,7 +9,7 @@
   "commands": [
     {
       "name": "wiso",
-      "description": "Wi‑Fi (profils, clés), interfaces, voisins ARP, test port, mini-scan TCP."
+      "description": "Wi-Fi, ARP, route, DNS, gateway, lan, scan TCP, pare-feu, listeners, partages."
     }
   ]
 }

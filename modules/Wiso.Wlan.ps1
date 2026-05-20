@@ -2,7 +2,7 @@
 # Branche Wi-Fi : netsh wlan.
 
 function Invoke-WisoWlanShowProfiles {
-    & netsh.exe wlan show profiles 2>&1 | ForEach-Object { "$_" }
+    Invoke-WisoNativeCommand -FileName "netsh.exe" -Arguments "wlan show profiles" -FixConsoleEncoding
 }
 
 function Invoke-WisoWlanShowProfile {
@@ -16,8 +16,13 @@ function Invoke-WisoWlanShowProfile {
     $safe = $ProfileName.Replace('"', "'")
     $nameArg = 'name="' + $safe + '"'
     if ($WithKey) {
-        & netsh.exe wlan show profile $nameArg key=clear 2>&1 | ForEach-Object { "$_" }
+        $args = "wlan show profile $nameArg key=clear"
     } else {
-        & netsh.exe wlan show profile $nameArg 2>&1 | ForEach-Object { "$_" }
+        $args = "wlan show profile $nameArg"
     }
+    Invoke-WisoNativeCommand -FileName "netsh.exe" -Arguments $args -FixConsoleEncoding
+}
+
+function Invoke-WisoWlanCurrent {
+    Invoke-WisoNativeCommand -FileName "netsh.exe" -Arguments "wlan show interfaces" -FixConsoleEncoding
 }

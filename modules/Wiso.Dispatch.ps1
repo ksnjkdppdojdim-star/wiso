@@ -21,8 +21,14 @@ function Invoke-WisoDispatch {
         "^(help|-h|--help)$" {
             return (Get-WisoHelpText)
         }
-        "^(profiles|list|wifi)$" {
+        "^(version|ver)$" {
+            return (Invoke-WisoWithErrorContext -Branch "machine/version" -Action { Invoke-WisoVersionInfo })
+        }
+        "^(profiles|list)$" {
             return (Invoke-WisoWithErrorContext -Branch "wifi/profiles" -Action { Invoke-WisoWlanShowProfiles })
+        }
+        "^(wifi|wlan|radio)$" {
+            return (Invoke-WisoWithErrorContext -Branch "wifi/current" -Action { Invoke-WisoWlanCurrent })
         }
         "^show$" {
             if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso show <profil>") }
@@ -44,10 +50,38 @@ function Invoke-WisoDispatch {
             })
         }
         "^(neighbors|arp)$" {
-            if ($rest.Count -ge 1 -and $rest[0].Trim().ToLowerInvariant() -eq "win") {
-                return (Invoke-WisoWithErrorContext -Branch "net/neighbors-win" -Action { Invoke-WisoNeighborsWin })
+            if ($rest.Count -ge 1) {
+                $mode = $rest[0].Trim().ToLowerInvariant()
+                switch ($mode) {
+                    "win" {
+                        return (Invoke-WisoWithErrorContext -Branch "net/neighbors-win" -Action { Invoke-WisoNeighborsWin })
+                    }
+                    "brief" {
+                        return (Invoke-WisoWithErrorContext -Branch "net/neighbors-brief" -Action { Invoke-WisoNeighborsBrief })
+                    }
+                    default {
+                        throw (New-WisoUsageError "wiso neighbors [brief|win]")
+                    }
+                }
             }
             return (Invoke-WisoWithErrorContext -Branch "net/neighbors-arp" -Action { Invoke-WisoNeighborsArp })
+        }
+        "^brief$" {
+            return (Invoke-WisoWithErrorContext -Branch "net/neighbors-brief" -Action { Invoke-WisoNeighborsBrief })
+        }
+        "^route$" {
+            return (Invoke-WisoWithErrorContext -Branch "net/route" -Action { Invoke-WisoRoute })
+        }
+        "^dns$" {
+            return (Invoke-WisoWithErrorContext -Branch "net/dns" -Action { Invoke-WisoDns })
+        }
+        "^(gateway|gw)$" {
+            return (Invoke-WisoWithErrorContext -Branch "net/gateway" -Action { Invoke-WisoGateway })
+        }
+        "^lan$" {
+            $max = 24
+            if ($rest.Count -ge 1) { [int]$max = $rest[0] }
+            return (Invoke-WisoWithErrorContext -Branch "net/lan" -Action { Invoke-WisoLan -MaxHosts $max })
         }
         "^ping$" {
             if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso ping <hote> [nombre]") }
@@ -62,10 +96,38 @@ function Invoke-WisoDispatch {
             $port = [int]$rest[1]
             return (Invoke-WisoWithErrorContext -Branch "net/port" -Action { Invoke-WisoPortTest -HostName $h -Port $port })
         }
-        "^scan$" {
-            if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso scan <hote>") }
+        "^portscan$" {
+            if ($rest.Count -lt 2) { throw (New-WisoUsageError "wiso portscan <hote> <ports>") }
             $h = $rest[0]
+            $portsSpec = ($rest[1..($rest.Count - 1)] -join ",")
+            return (Invoke-WisoWithErrorContext -Branch "net/portscan" -Action { Invoke-WisoPortscan -HostName $h -PortsSpec $portsSpec })
+        }
+        "^scan$" {
+            if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso scan <hote> [quick]") }
+            $h = $rest[0]
+            if ($rest.Count -ge 2 -and $rest[1].Trim().ToLowerInvariant() -eq "quick") {
+                return (Invoke-WisoWithErrorContext -Branch "net/scan-quick" -Action { Invoke-WisoTcpScanQuick -HostName $h })
+            }
+            if ($rest.Count -ge 1 -and $h.Trim().ToLowerInvariant() -eq "quick" -and $rest.Count -ge 2) {
+                return (Invoke-WisoWithErrorContext -Branch "net/scan-quick" -Action { Invoke-WisoTcpScanQuick -HostName $rest[1] })
+            }
             return (Invoke-WisoWithErrorContext -Branch "net/scan" -Action { Invoke-WisoTcpScan -HostName $h })
+        }
+        "^quick$" {
+            if ($rest.Count -lt 2 -or $rest[0].Trim().ToLowerInvariant() -ne "scan") {
+                throw (New-WisoUsageError "wiso quick scan <hote>")
+            }
+            $h = $rest[1]
+            return (Invoke-WisoWithErrorContext -Branch "net/scan-quick" -Action { Invoke-WisoTcpScanQuick -HostName $h })
+        }
+        "^(firewall|fw)$" {
+            return (Invoke-WisoWithErrorContext -Branch "sec/firewall" -Action { Invoke-WisoFirewall })
+        }
+        "^(listeners|listen)$" {
+            return (Invoke-WisoWithErrorContext -Branch "sec/listeners" -Action { Invoke-WisoListeners })
+        }
+        "^(shares|share)$" {
+            return (Invoke-WisoWithErrorContext -Branch "sec/shares" -Action { Invoke-WisoShares })
         }
         "^who$" {
             return (Invoke-WisoWithErrorContext -Branch "machine/who" -Action { Invoke-WisoWho })

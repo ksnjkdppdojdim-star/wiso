@@ -11,13 +11,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$script:WisoInstallRoot = $PSScriptRoot
+$global:WisoInstallRoot = $PSScriptRoot
 
 $moduleFiles = @(
     "Wiso.Common.ps1",
     "Wiso.Help.ps1",
     "Wiso.Wlan.ps1",
     "Wiso.Network.ps1",
+    "Wiso.Security.ps1",
     "Wiso.Machine.ps1",
     "Wiso.Dispatch.ps1"
 )

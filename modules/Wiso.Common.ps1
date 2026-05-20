@@ -1,10 +1,18 @@
 #Requires -Version 5.1
-# Fonctions communes : mots réservés, erreurs typées, racine d'installation.
+# Fonctions communes : version, encodage console, erreurs, execution native.
+
+$script:WisoVersion = "0.3.0"
+
+function Get-WisoVersion {
+    return $script:WisoVersion
+}
 
 function Get-WisoReservedWords {
     return @(
-        "help", "-h", "--help", "profiles", "list", "wifi", "show", "key", "pw", "password",
-        "interfaces", "if", "neighbors", "arp", "ping", "port", "scan", "who"
+        "help", "-h", "--help", "profiles", "list", "wifi", "wlan", "radio", "show", "key", "pw", "password",
+        "interfaces", "if", "neighbors", "arp", "brief", "ping", "port", "scan", "quick", "portscan",
+        "route", "dns", "gateway", "gw", "lan", "firewall", "fw", "listeners", "listen", "shares", "share",
+        "who", "version", "ver"
     )
 }
 
@@ -34,4 +42,59 @@ function Invoke-WisoWithErrorContext {
             $_.Exception
         )
     }
+}
+
+function Get-WisoInstallRoot {
+    if ($global:WisoInstallRoot) { return $global:WisoInstallRoot }
+    return $PSScriptRoot
+}
+
+function Convert-WisoConsoleText {
+    param([string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    $fixed = $Text
+    $fixed = $fixed -replace 'Interface\S*\s*:', 'Interface:'
+    $fixed = $fixed -replace "Adresse Internet", "Address"
+    $fixed = $fixed -replace "Adresse physique", "MAC"
+    $fixed = $fixed -replace "dynamique", "dynamic"
+    $fixed = $fixed -replace "statique", "static"
+    $fixed = $fixed -replace "Type", "Type"
+    return $fixed
+}
+
+function Invoke-WisoNativeCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [string]$Arguments = "",
+        [int]$WaitMs = 8000,
+        [switch]$FixConsoleEncoding
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $FileName
+    $psi.Arguments = $Arguments
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    if ($FixConsoleEncoding) {
+        try {
+            $oem = [System.Text.Encoding]::GetEncoding(850)
+            $psi.StandardOutputEncoding = $oem
+            $psi.StandardErrorEncoding = $oem
+        } catch {
+            # anciennes versions .NET : normalisation textuelle seulement
+        }
+    }
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $null = $p.WaitForExit($WaitMs)
+    if ($FixConsoleEncoding) {
+        $out = Convert-WisoConsoleText -Text $out
+        $err = Convert-WisoConsoleText -Text $err
+    }
+    if (-not [string]::IsNullOrWhiteSpace($err)) {
+        $out = $out + "`n" + $err
+    }
+    return $out
 }
