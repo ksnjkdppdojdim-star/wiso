@@ -214,35 +214,141 @@ function Invoke-WisoGateway {
     return ($lines -join "`n")
 }
 
+function Test-WisoPingHostOnce {
+    param(
+        [Parameter(Mandatory = $true)][string]$Target,
+        [int]$WaitMs = 200
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "$env:SystemRoot\System32\ping.exe"
+    $psi.Arguments = "-n 1 -w $WaitMs `"$Target`""
+    $psi.RedirectStandardOutput = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $null = $p.StandardOutput.ReadToEnd()
+    $null = $p.WaitForExit(2000)
+    return ($p.ExitCode -eq 0)
+}
+
+function Get-WisoLanSubnetContext {
+    $cfg = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } |
+        Select-Object -First 1
+    if (-not $cfg) {
+        throw "Aucune interface IPv4 avec passerelle."
+    }
+    $ip = $cfg.IPv4Address.IPAddress
+    if ($ip -is [array]) { $ip = $ip[0] }
+    $prefix = $cfg.IPv4Address.PrefixLength
+    if ($prefix -ne 24) {
+        throw ("Prefix /{0} non supporte pour lan (seul /24)." -f $prefix)
+    }
+    $octets = $ip -split '\.'
+    if ($octets.Count -ne 4) {
+        throw "Adresse IPv4 invalide: $ip"
+    }
+    return @{
+        Base      = "{0}.{1}.{2}" -f $octets[0], $octets[1], $octets[2]
+        Gateway   = $cfg.IPv4DefaultGateway.NextHop
+        Interface = $cfg.InterfaceAlias
+    }
+}
+
+function Invoke-WisoLanParallel {
+    param(
+        [int]$MaxHosts = 24,
+        [int]$Throttle = 8
+    )
+    if ($MaxHosts -lt 1) { $MaxHosts = 1 }
+    if ($MaxHosts -gt 32) { $MaxHosts = 32 }
+    if ($Throttle -lt 2) { $Throttle = 2 }
+    if ($Throttle -gt 16) { $Throttle = 16 }
+
+    $ctx = Get-WisoLanSubnetContext
+    $base = $ctx.Base
+    $gw = $ctx.Gateway
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(("Subnet: {0}.0/24 (interface {1})" -f $base, $ctx.Interface))
+    $lines.Add(("Gateway: {0}" -f $gw))
+    $lines.Add(("Scan ICMP parallele: {0}.1 .. {0}.{1} (throttle {2})" -f $base, $MaxHosts, $Throttle))
+    $lines.Add("")
+
+    $targets = 1..$MaxHosts | ForEach-Object { "{0}.{1}" -f $base, $_ }
+    $alive = New-Object System.Collections.Generic.List[string]
+    $queue = [System.Collections.Queue]::Synchronized([System.Collections.Queue]::new())
+    foreach ($t in $targets) { $null = $queue.Enqueue($t) }
+
+    $pool = [runspacefactory]::CreateRunspacePool(1, $Throttle)
+    $pool.Open()
+    $pingExe = Join-Path $env:SystemRoot "System32\ping.exe"
+    $scriptBlock = {
+        param($ip, $exe)
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $exe
+        $psi.Arguments = "-n 1 -w 200 `"$ip`""
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $null = $p.StandardOutput.ReadToEnd()
+        $null = $p.WaitForExit(2000)
+        if ($p.ExitCode -eq 0) { return $ip }
+        return $null
+    }
+
+    $running = @()
+    while ($queue.Count -gt 0 -or $running.Count -gt 0) {
+        while ($running.Count -lt $Throttle -and $queue.Count -gt 0) {
+            $ip = $queue.Dequeue()
+            $ps = [powershell]::Create().AddScript($scriptBlock).AddArgument($ip).AddArgument($pingExe)
+            $ps.RunspacePool = $pool
+            $running += [pscustomobject]@{ PS = $ps; Async = $ps.BeginInvoke() }
+        }
+        $done = @()
+        foreach ($r in $running) {
+            if ($r.Async.IsCompleted) {
+                $result = $r.PS.EndInvoke($r.Async)
+                $r.PS.Dispose()
+                if ($result) { $alive.Add($result) | Out-Null }
+                $done += $r
+            }
+        }
+        $running = $running | Where-Object { $_ -notin $done }
+        if ($running.Count -gt 0) { Start-Sleep -Milliseconds 40 }
+    }
+    $pool.Close()
+    $pool.Dispose()
+
+    if ($alive.Count -eq 0) {
+        $lines.Add("Aucune reponse ICMP dans la plage scannee.")
+    } else {
+        $alive | Sort-Object {
+            $p = $_.Split('.')
+            [int]$p[3]
+        } | ForEach-Object {
+            $lines.Add(("  ALIVE  {0}" -f $_))
+        }
+    }
+    return ($lines -join "`n")
+}
+
 function Invoke-WisoLan {
     param([int]$MaxHosts = 24)
     if ($MaxHosts -lt 1) { $MaxHosts = 1 }
     if ($MaxHosts -gt 32) { $MaxHosts = 32 }
 
-    $cfg = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } |
-        Select-Object -First 1
-
-    if (-not $cfg) {
-        throw "Aucune interface IPv4 avec passerelle."
+    try {
+        $ctx = Get-WisoLanSubnetContext
+    } catch {
+        return $_.Exception.Message
     }
-
-    $ip = $cfg.IPv4Address.IPAddress
-    if ($ip -is [array]) { $ip = $ip[0] }
-    $prefix = $cfg.IPv4Address.PrefixLength
-    if ($prefix -ne 24) {
-        return ("Prefix /{0} non supporte pour lan (seul /24). Utilisez wiso ping." -f $prefix)
-    }
-
-    $octets = $ip -split '\.'
-    if ($octets.Count -ne 4) {
-        throw "Adresse IPv4 invalide: $ip"
-    }
-    $base = "{0}.{1}.{2}" -f $octets[0], $octets[1], $octets[2]
-    $gw = $cfg.IPv4DefaultGateway.NextHop
+    $base = $ctx.Base
+    $gw = $ctx.Gateway
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add(("Subnet: {0}.0/24 (interface {1})" -f $base, $cfg.InterfaceAlias))
+    $lines.Add(("Subnet: {0}.0/24 (interface {1})" -f $base, $ctx.Interface))
     $lines.Add(("Gateway: {0}" -f $gw))
     $lines.Add(("Scan ICMP: {0}.1 .. {0}.{1} (max {1} hotes)" -f $base, $MaxHosts))
     $lines.Add("")
@@ -250,17 +356,8 @@ function Invoke-WisoLan {
     $alive = New-Object System.Collections.Generic.List[string]
     1..$MaxHosts | ForEach-Object {
         $target = "{0}.{1}" -f $base, $_
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "$env:SystemRoot\System32\ping.exe"
-        $psi.Arguments = "-n 1 -w 200 `"$target`""
-        $psi.RedirectStandardOutput = $true
-        $psi.UseShellExecute = $false
-        $psi.CreateNoWindow = $true
-        $p = [System.Diagnostics.Process]::Start($psi)
-        $null = $p.StandardOutput.ReadToEnd()
-        $null = $p.WaitForExit(1500)
-        if ($p.ExitCode -eq 0) {
-            $alive.Add($target)
+        if (Test-WisoPingHostOnce -Target $target) {
+            $alive.Add($target) | Out-Null
         }
     }
 

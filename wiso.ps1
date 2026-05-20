@@ -21,6 +21,7 @@ $moduleFiles = @(
     "Wiso.Nmap.ps1",
     "Wiso.Security.ps1",
     "Wiso.Machine.ps1",
+    "Wiso.Json.ps1",
     "Wiso.Dispatch.ps1"
 )
 

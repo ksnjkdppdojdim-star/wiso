@@ -7,44 +7,38 @@ function Get-WisoHelpText {
 wiso $ver - audit reseau / Wi-Fi (usage interne, machines autorisees uniquement)
 
 Wi-Fi
-  wiso profiles              Liste des profils WLAN enregistres
-  wiso wifi                  Connexion WLAN active
-  wiso show <profil>         Detail du profil sans cle
-  wiso key <profil>          Profil + cle (key=clear) - sensible
-  wiso export [keys] [max N] Inventaire: wifi active + profils (defaut max 8)
-  wiso export keys           Export avec mots de passe - TRES SENSIBLE
-  wiso delete <profil>       Affiche avertissement (sans -force)
-  wiso delete <profil> -force Supprime le profil WLAN
-  wiso "<profil>"            Raccourci cle (un seul argument)
+  wiso profiles              Liste des profils WLAN
+  wiso wifi                  Resume parse (SSID, signal, canal, auth)
+  wiso wifi raw              Sortie netsh complete
+  wiso show <profil>         Detail sans cle
+  wiso key <profil>          Profil + cle - sensible
+  wiso export [keys] [max N] Inventaire profils
+  wiso delete <profil> -force Suppression profil
+  wiso "<profil>"            Raccourci cle
+
+JSON (sortie ConvertTo-Json)
+  wiso json wifi             Etat WLAN structure
+  wiso json profiles         Noms de profils
+  wiso json interfaces       IPv4 + passerelle
+  wiso json neighbors        Voisins ARP (brief)
+  wiso json dns | gateway | lan [parallel] [max N]
+  wiso json who | version | firewall | listeners
 
 Reseau
-  wiso interfaces            Adresses IPv4 par interface
-  wiso neighbors             Table ARP complete
-  wiso neighbors brief       Voisins utiles (sans multicast)
-  wiso neighbors win         Get-NetNeighbor (lent)
-  wiso route                 Routes IPv4
-  wiso dns                   Serveurs DNS par interface
-  wiso gateway               Passerelle + ping rapide
-  wiso lan [max]             Ping sweep /24 (defaut 24, max 32)
-  wiso ping <hote> [n]       Ping ICMP
-  wiso port <hote> <port>    Test TCP rapide
-  wiso scan <hote>           8 ports TCP courants
-  wiso scan quick <hote>     4 ports (rapide)
-  wiso portscan <h> <ports>  Ports personnalises (max 12)
-  wiso nmap <cible> [args]   nmap.exe si installe (defaut -F)
+  wiso interfaces            IPv4 par interface
+  wiso neighbors             ARP complet
+  wiso neighbors brief       Voisins utiles
+  wiso route | dns | gateway
+  wiso lan [max]             Ping sweep sequentiel (/24)
+  wiso lan parallel [max]    Ping sweep parallele (8 workers)
+  wiso ping | port | scan | scan quick | portscan | nmap
 
-Securite locale
-  wiso firewall              Profils pare-feu Windows
-  wiso listeners             TCP en ecoute
-  wiso shares                Partages locaux
+Securite
+  wiso firewall | listeners | shares
 
 Machine
-  wiso who                   Hostname + utilisateur
-  wiso version               Version plugin
+  wiso who | version | help
 
-Aide
-  wiso help
-
-Timeouts Trish (~5 s): export max 4-6, neighbors brief, scan quick.
+Timeouts Trish (~5 s): json wifi, neighbors brief, lan parallel max 24, scan quick.
 "@
 }

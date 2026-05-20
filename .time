@@ -1,23 +1,20 @@
 # wiso — plan / statut
 
-## Fait (v0.3–0.4)
+## Fait (v0.3–0.5)
 
-- [x] P0 wifi, profiles, show, key, raccourci SSID
-- [x] P0 export (+ keys, max N)
-- [x] P0 delete (-force obligatoire)
-- [x] P1 route, dns, gateway, lan, portscan
-- [x] P1 firewall, shares, listeners
-- [x] P2 nmap (si nmap.exe present sur l'agent)
-- [x] version, neighbors brief, scan quick, encodage ARP
+- [x] Wi-Fi, export, delete, nmap, securite locale
+- [x] json <sous-cmd> (wifi, profiles, interfaces, neighbors, dns, gateway, lan, who, version, firewall, listeners)
+- [x] lan parallel (runspace pool, throttle 8)
+- [x] wifi parse (resume) + wifi raw
+- [x] neighbors brief, scan quick, encodage ARP
 
-## Prochain (v0.5 — confort)
+## Prochain (v0.6)
 
-- [ ] wiso json <sous-cmd> — sortie structuree
-- [ ] wiso lan parallele (jobs bornes) pour perf
-- [ ] wiso wifi parse — SSID/signal/canal en lignes courtes
-- [ ] Augmenter timeout Trish cote projet trish (hors plugin)
+- [ ] Timeout Trish : PR / patch sur depôt trish (client Timeout > 5s)
+- [ ] wiso json portscan / scan (objets structures)
+- [ ] Tests Pester par module
 
 ## Plus tard
 
-- [ ] wiso export fichier (chemin distant) si Trish le permet
-- [ ] Tests Pester locaux par module
+- [ ] wiso export vers fichier distant
+- [ ] wiso wifi signal historique (si agent long-running)

@@ -28,7 +28,14 @@ function Invoke-WisoDispatch {
             return (Invoke-WisoWithErrorContext -Branch "wifi/profiles" -Action { Invoke-WisoWlanShowProfiles })
         }
         "^(wifi|wlan|radio)$" {
-            return (Invoke-WisoWithErrorContext -Branch "wifi/current" -Action { Invoke-WisoWlanCurrent })
+            if ($rest.Count -ge 1 -and $rest[0].Trim().ToLowerInvariant() -eq "raw") {
+                return (Invoke-WisoWithErrorContext -Branch "wifi/raw" -Action { Invoke-WisoWlanCurrent })
+            }
+            return (Invoke-WisoWithErrorContext -Branch "wifi/summary" -Action { Invoke-WisoWlanCurrentSummary })
+        }
+        "^json$" {
+            if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso json <wifi|profiles|interfaces|...>") }
+            return (Invoke-WisoWithErrorContext -Branch "json" -Action { Invoke-WisoJsonCommand -SubArgs $rest })
         }
         "^show$" {
             if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso show <profil>") }
@@ -128,7 +135,22 @@ function Invoke-WisoDispatch {
         }
         "^lan$" {
             $max = 24
-            if ($rest.Count -ge 1) { [int]$max = $rest[0] }
+            $parallel = $false
+            $i = 0
+            while ($i -lt $rest.Count) {
+                $tok = $rest[$i].Trim().ToLowerInvariant()
+                if ($tok -eq "parallel") { $parallel = $true; $i++; continue }
+                if ($tok -eq "max" -and ($i + 1) -lt $rest.Count) {
+                    [int]$max = $rest[$i + 1]
+                    $i += 2
+                    continue
+                }
+                if ($tok -match '^\d+$') { [int]$max = $tok; $i++; continue }
+                $i++
+            }
+            if ($parallel) {
+                return (Invoke-WisoWithErrorContext -Branch "net/lan-parallel" -Action { Invoke-WisoLanParallel -MaxHosts $max })
+            }
             return (Invoke-WisoWithErrorContext -Branch "net/lan" -Action { Invoke-WisoLan -MaxHosts $max })
         }
         "^ping$" {

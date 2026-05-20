@@ -45,6 +45,95 @@ function Invoke-WisoWlanCurrent {
     Invoke-WisoNativeCommand -FileName "netsh.exe" -Arguments "wlan show interfaces" -FixConsoleEncoding
 }
 
+function Parse-WisoWlanInterfaceBlock {
+    param([string]$BlockText)
+    $fields = @{}
+    foreach ($line in ($BlockText -split "`r?`n")) {
+        if ($line -match '^\s+(.+?)\s*:\s*(.+)\s*$') {
+            $key = $Matches[1].Trim().ToLowerInvariant()
+            $key = $key -replace 'é','e' -replace 'è','e' -replace 'ê','e' -replace 'à','a' -replace 'û','u' -replace 'ô','o'
+            $key = $key -replace '[^a-z0-9]', ''
+            $fields[$key] = $Matches[2].Trim()
+        }
+    }
+    return $fields
+}
+
+function Get-WisoWifiStatusObject {
+    $raw = Invoke-WisoWlanCurrent
+    $blocks = @()
+    $current = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ($raw -split "`r?`n")) {
+        if ($line -match '^\s*$' -and $current.Count -gt 0) {
+            $blocks += (($current -join "`n"))
+            $current.Clear()
+            continue
+        }
+        if ($line -match '^\S') {
+            if ($current.Count -gt 0) {
+                $blocks += (($current -join "`n"))
+                $current.Clear()
+            }
+        }
+        $current.Add($line) | Out-Null
+    }
+    if ($current.Count -gt 0) {
+        $blocks += (($current -join "`n"))
+    }
+
+    $ifaces = @()
+    foreach ($b in $blocks) {
+        if ($b -notmatch ':') { continue }
+        $f = Parse-WisoWlanInterfaceBlock -BlockText $b
+        if ($f.Count -eq 0) { continue }
+        $ifaces += @{
+            name           = $(if ($f['name']) { $f['name'] } else { $f['nom'] })
+            description    = $f['description']
+            guid           = $f['guid']
+            state          = $(if ($f['state']) { $f['state'] } else { $f['etat'] })
+            ssid           = $f['ssid']
+            bssid          = $f['bssid']
+            networkType    = $(if ($f['networktype']) { $f['networktype'] } else { $f['typereseau'] })
+            radioType      = $(if ($f['radiotype']) { $f['radiotype'] } else { $f['typeradio'] })
+            authentication = $(if ($f['authentication']) { $f['authentication'] } else { $f['authentification'] })
+            cipher         = $(if ($f['cipher']) { $f['cipher'] } else { $f['chiffrement'] })
+            channel        = $(if ($f['channel']) { $f['channel'] } else { $f['canal'] })
+            signal         = $f['signal']
+            receiveRate    = $(if ($f['receivrate']) { $f['receivrate'] } else { $f['rceptionmbps'] })
+            transmitRate   = $(if ($f['transmitrate']) { $f['transmitrate'] } else { $f['transmissionmbps'] })
+        }
+    }
+
+    return @{
+        command    = "wifi"
+        computer   = $env:COMPUTERNAME
+        interfaces = $ifaces
+    }
+}
+
+function Invoke-WisoWlanCurrentSummary {
+    $obj = Get-WisoWifiStatusObject
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("=== Wi-Fi actif sur $env:COMPUTERNAME ===")
+    if ($obj.interfaces.Count -eq 0) {
+        $lines.Add("Aucune interface WLAN detectee ou non connectee.")
+        return ($lines -join "`n")
+    }
+    foreach ($ifc in $obj.interfaces) {
+        $lines.Add("")
+        $lines.Add(("Interface: {0}" -f $(if ($ifc.name) { $ifc.name } else { "?" })))
+        $lines.Add(("  Etat:     {0}" -f $(if ($ifc.state) { $ifc.state } else { "-" })))
+        $lines.Add(("  SSID:     {0}" -f $(if ($ifc.ssid) { $ifc.ssid } else { "-" })))
+        $lines.Add(("  Signal:   {0}" -f $(if ($ifc.signal) { $ifc.signal } else { "-" })))
+        $lines.Add(("  Canal:    {0}" -f $(if ($ifc.channel) { $ifc.channel } else { "-" })))
+        $lines.Add(("  Auth:     {0}" -f $(if ($ifc.authentication) { $ifc.authentication } else { "-" })))
+        $lines.Add(("  Radio:    {0}" -f $(if ($ifc.radioType) { $ifc.radioType } else { "-" })))
+    }
+    $lines.Add("")
+    $lines.Add("(wiso wifi raw = sortie netsh complete)")
+    return ($lines -join "`n")
+}
+
 function Invoke-WisoWlanExport {
     param(
         [switch]$WithKeys,
