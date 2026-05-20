@@ -1,0 +1,23 @@
+# wiso — plan / statut
+
+## Fait (v0.3–0.4)
+
+- [x] P0 wifi, profiles, show, key, raccourci SSID
+- [x] P0 export (+ keys, max N)
+- [x] P0 delete (-force obligatoire)
+- [x] P1 route, dns, gateway, lan, portscan
+- [x] P1 firewall, shares, listeners
+- [x] P2 nmap (si nmap.exe present sur l'agent)
+- [x] version, neighbors brief, scan quick, encodage ARP
+
+## Prochain (v0.5 — confort)
+
+- [ ] wiso json <sous-cmd> — sortie structuree
+- [ ] wiso lan parallele (jobs bornes) pour perf
+- [ ] wiso wifi parse — SSID/signal/canal en lignes courtes
+- [ ] Augmenter timeout Trish cote projet trish (hors plugin)
+
+## Plus tard
+
+- [ ] wiso export fichier (chemin distant) si Trish le permet
+- [ ] Tests Pester locaux par module

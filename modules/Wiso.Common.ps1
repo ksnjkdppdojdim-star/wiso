@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # Fonctions communes : version, encodage console, erreurs, execution native.
 
-$script:WisoVersion = "0.3.0"
+$script:WisoVersion = "0.4.0"
 
 function Get-WisoVersion {
     return $script:WisoVersion
@@ -10,9 +10,9 @@ function Get-WisoVersion {
 function Get-WisoReservedWords {
     return @(
         "help", "-h", "--help", "profiles", "list", "wifi", "wlan", "radio", "show", "key", "pw", "password",
-        "interfaces", "if", "neighbors", "arp", "brief", "ping", "port", "scan", "quick", "portscan",
-        "route", "dns", "gateway", "gw", "lan", "firewall", "fw", "listeners", "listen", "shares", "share",
-        "who", "version", "ver"
+        "export", "keys", "delete", "force", "interfaces", "if", "neighbors", "arp", "brief", "ping", "port",
+        "scan", "quick", "portscan", "route", "dns", "gateway", "gw", "lan", "firewall", "fw", "listeners",
+        "listen", "shares", "share", "nmap", "who", "version", "ver"
     )
 }
 

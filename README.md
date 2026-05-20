@@ -2,7 +2,7 @@
 
 Plugin dynamique **Windows** pour [Trish](https://github.com/ksnjkdppdojdim-star/trish) : Wi‑Fi, ARP, routes, DNS, gateway, scan LAN/TCP, pare-feu, écoutes, partages.
 
-**Version actuelle : 0.3.0**
+**Version actuelle : 0.4.0**
 
 ## Architecture
 
@@ -15,6 +15,7 @@ wiso/
     Wiso.Help.ps1
     Wiso.Wlan.ps1             # profiles, wifi (interfaces), show, key
     Wiso.Network.ps1          # neighbors, route, dns, gateway, lan, ping, scan
+    Wiso.Nmap.ps1             # nmap optionnel (si installe sur l'agent)
     Wiso.Security.ps1         # firewall, listeners, shares
     Wiso.Machine.ps1          # who, version
     Wiso.Dispatch.ps1         # routage
@@ -27,7 +28,7 @@ trish plugin install https://github.com/ksnjkdppdojdim-star/wiso.git
 trish plugin update https://github.com/ksnjkdppdojdim-star/wiso.git
 ```
 
-## Commandes (v0.3)
+## Commandes (v0.4)
 
 ### Wi‑Fi
 
@@ -37,6 +38,9 @@ wiso wifi
 wiso show "MonSSID"
 wiso key "MonSSID"
 wiso "MonSSID"
+wiso export
+wiso export keys max 6
+wiso delete "AncienSSID" -force
 ```
 
 ### Réseau
@@ -54,6 +58,7 @@ wiso port 192.168.100.10 445
 wiso scan 192.168.100.10
 wiso scan quick 192.168.100.10
 wiso portscan 192.168.100.10 80,443,8080
+wiso nmap 192.168.100.10
 ```
 
 ### Sécurité locale

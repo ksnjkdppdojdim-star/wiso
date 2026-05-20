@@ -18,6 +18,7 @@ $moduleFiles = @(
     "Wiso.Help.ps1",
     "Wiso.Wlan.ps1",
     "Wiso.Network.ps1",
+    "Wiso.Nmap.ps1",
     "Wiso.Security.ps1",
     "Wiso.Machine.ps1",
     "Wiso.Dispatch.ps1"

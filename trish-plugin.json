@@ -1,6 +1,6 @@
 {
   "name": "wiso",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Plugin Trish reseau/Wi-Fi Windows : profils WLAN, ARP, route, DNS, gateway, scan TCP, pare-feu, ecoutes.",
   "entry": "wiso.ps1",
   "shell": "powershell",

@@ -44,6 +44,54 @@ function Invoke-WisoDispatch {
                 $sensitive
             ) -join "`n"
         }
+        "^export$" {
+            $withKeys = $false
+            $max = 8
+            $i = 0
+            while ($i -lt $rest.Count) {
+                $tok = $rest[$i].Trim().ToLowerInvariant()
+                if ($tok -in @("keys", "key", "password", "pw")) {
+                    $withKeys = $true
+                    $i++
+                    continue
+                }
+                if ($tok -eq "max" -and ($i + 1) -lt $rest.Count) {
+                    [int]$max = $rest[$i + 1]
+                    $i += 2
+                    continue
+                }
+                $i++
+            }
+            return (Invoke-WisoWithErrorContext -Branch "wifi/export" -Action {
+                Invoke-WisoWlanExport -WithKeys:$withKeys -MaxProfiles $max
+            })
+        }
+        "^delete$" {
+            if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso delete <profil> -force") }
+            $force = $false
+            $nameParts = New-Object System.Collections.Generic.List[string]
+            foreach ($a in $rest) {
+                if ($a.Trim().ToLowerInvariant() -in @("-force", "--force", "/force")) {
+                    $force = $true
+                } else {
+                    $nameParts.Add($a) | Out-Null
+                }
+            }
+            $name = ($nameParts -join " ").Trim()
+            if ($name -eq "") { throw (New-WisoUsageError "wiso delete <profil> -force") }
+            return (Invoke-WisoWithErrorContext -Branch "wifi/delete" -Action {
+                Invoke-WisoWlanDeleteProfile -ProfileName $name -Force:$force
+            })
+        }
+        "^nmap$" {
+            if ($rest.Count -lt 1) { throw (New-WisoUsageError "wiso nmap <cible> [args]") }
+            $target = $rest[0]
+            $extra = "-F"
+            if ($rest.Count -gt 1) {
+                $extra = ($rest[1..($rest.Count - 1)] -join " ")
+            }
+            return (Invoke-WisoWithErrorContext -Branch "net/nmap" -Action { Invoke-WisoNmap -Target $target -ExtraArgs $extra })
+        }
         "^(interfaces|if)$" {
             return (Invoke-WisoWithErrorContext -Branch "net/interfaces" -Action {
                 ((Invoke-WisoInterfaces) -join "`n")
